@@ -1,0 +1,22 @@
+# ============================================================
+# Render.com Deployment Config
+# Push to GitHub → connect repo in Render → it uses this file
+# ============================================================
+
+services:
+  - type: web
+    name: secure-ai-gateway
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free                     # Free tier on Render
+    region: oregon
+
+    # Environment variables — set ANTHROPIC_API_KEY in Render dashboard
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false                # Marked secret, set manually in Render UI
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+
+    healthCheckPath: /status       # Render will ping this to confirm UP
+    autoDeploy: true               # Auto-redeploy on git push
