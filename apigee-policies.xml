@@ -1,0 +1,113 @@
+<!-- ============================================================
+     FILE: apigee-policies/VerifyAPIKey.xml
+     PURPOSE: Phase 2 - Security — reject requests without a valid API key
+     Attach to: PreFlow > Request in your proxy
+     ============================================================ -->
+<VerifyAPIKey name="VerifyAPIKey-1">
+    <DisplayName>Verify API Key</DisplayName>
+    <APIKey ref="request.queryparam.apikey"/>
+    <!--
+        Clients must pass: ?apikey=<their_key>
+        Or use header-based key (more secure):
+        <APIKey ref="request.header.x-api-key"/>
+    -->
+</VerifyAPIKey>
+
+
+<!-- ============================================================
+     FILE: apigee-policies/SpikeArrest.xml
+     PURPOSE: Phase 2 - Traffic Control — limit to 10 requests/minute
+     Attach to: PreFlow > Request (AFTER VerifyAPIKey)
+     ============================================================ -->
+<SpikeArrest name="SpikeArrest-1">
+    <DisplayName>Spike Arrest - 10rpm</DisplayName>
+    <Rate>10pm</Rate>
+    <!--
+        10pm = 10 per minute (Apigee notation)
+        Apigee smooths this to ~1 request every 6 seconds
+        to prevent burst abuse. Returns 429 when exceeded.
+    -->
+    <UseEffectiveCount>true</UseEffectiveCount>
+</SpikeArrest>
+
+
+<!-- ============================================================
+     FILE: apigee-policies/JSONToXML.xml
+     PURPOSE: Phase 2 - Transformation — convert JSON response to XML
+     Attach to: PostFlow > Response
+     ============================================================ -->
+<JSONToXML name="JSONToXML-1">
+    <DisplayName>JSON to XML Transformer</DisplayName>
+    <Options>
+        <NullValue>NULL</NullValue>
+        <NamespaceBlockName>#namespaces</NamespaceBlockName>
+        <DefaultNamespaceNodeName>$default</DefaultNamespaceNodeName>
+        <NamespaceSeparator>:</NamespaceSeparator>
+        <TextAlwaysAsProperty>false</TextAlwaysAsProperty>
+        <TextNodeName>#text</TextNodeName>
+        <InvalidCharsReplacement>_</InvalidCharsReplacement>
+        <ObjectRootElementName>Root</ObjectRootElementName>
+        <ArrayRootElementName>Array</ArrayRootElementName>
+        <ArrayItemElementName>Item</ArrayItemElementName>
+    </Options>
+    <OutputVariable>response</OutputVariable>
+    <Source>response</Source>
+</JSONToXML>
+
+
+<!-- ============================================================
+     FILE: apigee-policies/AssignMessage-ContentType.xml
+     PURPOSE: Update Content-Type header after JSON->XML transform
+     Attach to: PostFlow > Response (AFTER JSONToXML)
+     ============================================================ -->
+<AssignMessage name="AM-SetXMLContentType">
+    <DisplayName>Set XML Content-Type</DisplayName>
+    <Set>
+        <Headers>
+            <Header name="Content-Type">application/xml</Header>
+        </Headers>
+    </Set>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+    <AssignTo createNew="false" type="response"/>
+</AssignMessage>
+
+
+<!-- ============================================================
+     FILE: apigee-policies/SharedFlow-LoggingHeader.xml
+     PURPOSE: Phase 3 - Shared Flow — adds tracing headers to every request
+     This lives in a SHARED FLOW, not directly in the proxy.
+     The proxy calls it via a FlowCallout policy.
+     ============================================================ -->
+<AssignMessage name="SF-AddLoggingHeaders">
+    <DisplayName>Add Logging & Tracing Headers</DisplayName>
+    <Set>
+        <Headers>
+            <!-- Unique trace ID for distributed tracing -->
+            <Header name="X-Correlation-ID">{messageid}</Header>
+            <!-- Which Apigee org/env processed this -->
+            <Header name="X-Apigee-Org">{organization.name}</Header>
+            <Header name="X-Apigee-Env">{environment.name}</Header>
+            <!-- Timestamp of when Apigee received the request -->
+            <Header name="X-Gateway-Timestamp">{system.timestamp}</Header>
+            <!-- Which API product the key belongs to -->
+            <Header name="X-API-Product">{verifyapikey.VerifyAPIKey-1.apiproduct.name}</Header>
+        </Headers>
+    </Set>
+    <IgnoreUnresolvedVariables>true</IgnoreUnresolvedVariables>
+    <AssignTo createNew="false" type="request"/>
+</AssignMessage>
+
+
+<!-- ============================================================
+     FILE: apigee-policies/FlowCallout-SharedFlow.xml
+     PURPOSE: Calls the Shared Flow from within your proxy
+     Attach to: PreFlow > Request (after SpikeArrest)
+     ============================================================ -->
+<FlowCallout name="FC-CommonLogging">
+    <DisplayName>Common Logging Shared Flow</DisplayName>
+    <SharedFlowBundle>common-logging-sf</SharedFlowBundle>
+    <!--
+        "common-logging-sf" must match the name of your
+        Shared Flow bundle deployed in Apigee.
+    -->
+</FlowCallout>

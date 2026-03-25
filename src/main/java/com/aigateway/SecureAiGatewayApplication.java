@@ -1,0 +1,12 @@
+package com.aigateway;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class SecureAiGatewayApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(SecureAiGatewayApplication.class, args);
+    }
+}
